@@ -1,0 +1,23 @@
+services:
+  db:
+    image: mariadb:latest
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: chat-app
+      MYSQL_USER: dev
+      MYSQL_PASSWORD: devpass
+    volumes:
+      - db_data:/var/lib/mysql
+
+  adminer:
+    image: adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+
+volumes:
+  db_data:
+    driver: local
