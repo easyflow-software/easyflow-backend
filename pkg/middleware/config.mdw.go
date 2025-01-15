@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"easyflow-backend/src/common"
+	"easyflow-backend/pkg/common"
 
 	"github.com/gin-gonic/gin"
 )

@@ -1,8 +1,8 @@
 package middleware
 
 import (
-	"easyflow-backend/src/api"
-	"easyflow-backend/src/common"
+	"easyflow-backend/pkg/api"
+	"easyflow-backend/pkg/common"
 	"net/http"
 	"os"
 

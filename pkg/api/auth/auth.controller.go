@@ -1,10 +1,10 @@
 package auth
 
 import (
-	"easyflow-backend/src/api"
-	"easyflow-backend/src/common"
-	"easyflow-backend/src/enum"
-	"easyflow-backend/src/middleware"
+	"easyflow-backend/pkg/api"
+	"easyflow-backend/pkg/common"
+	"easyflow-backend/pkg/enum"
+	"easyflow-backend/pkg/middleware"
 	"net/http"
 
 	"github.com/gin-gonic/gin"

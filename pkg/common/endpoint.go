@@ -1,7 +1,7 @@
 package common
 
 import (
-	"easyflow-backend/src/api"
+	"easyflow-backend/pkg/api"
 	"fmt"
 
 	"github.com/gin-gonic/gin"

@@ -1,10 +1,10 @@
 package auth
 
 import (
-	"easyflow-backend/src/api"
-	"easyflow-backend/src/common"
-	"easyflow-backend/src/database"
-	"easyflow-backend/src/enum"
+	"easyflow-backend/pkg/api"
+	"easyflow-backend/pkg/common"
+	"easyflow-backend/pkg/database"
+	"easyflow-backend/pkg/enum"
 	"errors"
 	"net/http"
 

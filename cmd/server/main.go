@@ -1,12 +1,12 @@
 package main
 
 import (
-	"easyflow-backend/src/api/auth"
-	"easyflow-backend/src/api/chat"
-	"easyflow-backend/src/api/user"
-	"easyflow-backend/src/common"
-	"easyflow-backend/src/database"
-	"easyflow-backend/src/middleware"
+	"easyflow-backend/pkg/api/auth"
+	"easyflow-backend/pkg/api/chat"
+	"easyflow-backend/pkg/api/user"
+	"easyflow-backend/pkg/common"
+	"easyflow-backend/pkg/database"
+	"easyflow-backend/pkg/middleware"
 	"os"
 	"strings"
 	"time"

@@ -1,11 +1,11 @@
 package chat
 
 import (
-	"easyflow-backend/src/api"
-	"easyflow-backend/src/api/auth"
-	"easyflow-backend/src/common"
-	"easyflow-backend/src/database"
-	"easyflow-backend/src/enum"
+	"easyflow-backend/pkg/api"
+	"easyflow-backend/pkg/api/auth"
+	"easyflow-backend/pkg/common"
+	"easyflow-backend/pkg/database"
+	"easyflow-backend/pkg/enum"
 	"net/http"
 
 	"gorm.io/gorm"

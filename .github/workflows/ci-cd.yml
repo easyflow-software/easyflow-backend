@@ -44,7 +44,7 @@ jobs:
       - uses: actions/setup-go@v5
 
       - name: build
-        run: CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o ./bin/easyflow-backend ./src
+        run: CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o ./bin/easyflow-backend ./cmd/server
 
       - name: upload artifact
         uses: actions/upload-artifact@v4
