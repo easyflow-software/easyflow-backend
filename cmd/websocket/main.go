@@ -64,6 +64,11 @@ func main() {
 	router.Use(gin.Recovery())
 	router.Use(middleware.LoggerMiddleware("WS"))
 
+	cm := websocket.NewClientManager()
+	go cm.Start()
+
+	router.Use(middleware.ClientManagerMiddleware(cm))
+
 	router.GET("/ws", websocket.WebsocketEndpoint)
 
 	log.Printf("Starting server on port %s", cfg.WebsocketPort)

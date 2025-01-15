@@ -19,42 +19,38 @@ func WebsocketEndpoint(c *gin.Context) {
 	w := c.Writer
 	r := c.Request
 
-	logger, err := c.Get("logger")
-	if !err {
-		c.JSON(http.StatusInternalServerError, api.ApiError{
-			Code:    http.StatusInternalServerError,
-			Error:   enum.ApiError,
-			Details: "Logger not found in context",
-		})
-		c.Abort()
-		return
-	}
+	logger, _ := c.Get("logger")
+	log, _ := logger.(*common.Logger)
 
-	log, ok := logger.(*common.Logger)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, api.ApiError{
-			Code:    http.StatusInternalServerError,
-			Error:   enum.ApiError,
-			Details: "Logger is not of type *common.Logger",
-		})
-		c.Abort()
-		return
-	}
+	cm, _ := c.Get("clientManager")
+	clientManager, _ := cm.(*ClientManager)
 
 	log.PrintfInfo("Upgrading connection to websocket")
 
-	conn, sock_err := upgrader.Upgrade(w, r, nil)
-	if sock_err != nil {
-		c.JSON(http.StatusInternalServerError, api.ApiError{
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.PrintfError("Failed to upgrade connection to websocket: %s", err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, api.ApiError{
 			Code:    http.StatusInternalServerError,
 			Error:   enum.UpgradeFailed,
-			Details: sock_err.Error(),
+			Details: err.Error(),
 		})
-		c.Abort()
-		log.PrintfError("Failed to upgrade connection to websocket: %s", sock_err.Error())
 		return
 	}
 
-	log.PrintfDebug("Closing connection")
-	defer conn.Close()
+	client := NewClient(conn)
+	done := make(chan struct{})
+
+	go func() {
+		client.Read()
+		done <- struct{}{}
+	}()
+	go client.Write()
+
+	clientManager.Register <- client
+	defer func() {
+		clientManager.Unregister <- client
+	}()
+
+	<-done
 }
