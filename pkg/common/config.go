@@ -26,6 +26,8 @@ type Config struct {
 	JwtSecret             string
 	JwtExpirationTime     int
 	RefreshExpirationTime int
+	// ws
+	WebsocketPort string
 	// s3
 	BucketURL                string
 	BucketAccessKeyId        string
@@ -75,6 +77,7 @@ func LoadDefaultConfig() *Config {
 		RefreshExpirationTime:    getEnvInt("REFRESH_EXPIRATION_TIME", 60*60*24*7), // 1 week
 		Port:                     getEnv("PORT", "4000"),
 		DebugMode:                getEnv("DEBUG_MODE", "false") == "true",
+		WebsocketPort:            getEnv("WEBSOCKET_PORT", "4001"),
 		BucketURL:                getEnv("BUCKET_URL", ""),
 		BucketAccessKeyId:        getEnv("BUCKET_ACCESS_KEY_ID", ""),
 		BucketSecret:             getEnv("BUCKET_SECRET", ""),
