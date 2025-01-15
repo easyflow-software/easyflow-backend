@@ -4,11 +4,10 @@ import (
 	"easyflow-backend/pkg/common"
 	"easyflow-backend/pkg/database"
 	"easyflow-backend/pkg/middleware"
+	"easyflow-backend/pkg/websocket"
 	"os"
-	"strings"
 	"time"
 
-	cors "github.com/OnlyNico43/gin-cors"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm/logger"
 )
@@ -60,20 +59,12 @@ func main() {
 	router.RedirectFixedPath = true
 	router.RedirectTrailingSlash = true
 
-	router.Use(cors.CorsMiddleware(cors.Config{
-		AllowedOrigins:   strings.Split(cfg.WebsocketPort, ", "),
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE"},
-		AllowedHeaders:   []string{"Authorization", "Content-Length", "Content-Type"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}))
-
-	log.Printf("Frontend URL for cors: %s", cfg.WebsocketPort)
-
 	router.Use(middleware.DatabaseMiddleware(dbInst.GetClient()))
 	router.Use(middleware.ConfigMiddleware(cfg))
 	router.Use(gin.Recovery())
+	router.Use(middleware.LoggerMiddleware("WS"))
+
+	router.GET("/ws", websocket.WebsocketEndpoint)
 
 	log.Printf("Starting server on port %s", cfg.WebsocketPort)
 	err = router.Run(":" + cfg.WebsocketPort)

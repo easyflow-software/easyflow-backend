@@ -18,4 +18,5 @@ const (
 	ExpiredAccessToken  ErrorCode = "EXPIRED_ACCESS_TOKEN"
 	ExpiredRefreshToken ErrorCode = "EXPIRED_REFRESH_TOKEN"
 	UserNotFound        ErrorCode = "USER_NOT_FOUND"
+	UpgradeFailed       ErrorCode = "UPGRADE_FAILED"
 )
