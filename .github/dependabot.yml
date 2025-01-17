@@ -6,35 +6,6 @@
 version: 2
 updates:
   - package-ecosystem: "gomod" # See documentation for possible values
-    directory: "/backend" # Location of package manifests
-    schedule:
-      interval: "weekly"
-    reviewers:
-    - "OnlyNico43"
-    
-  - package-ecosystem: "gomod" # See documentation for possible values
-    directory: "/websocket" # Location of package manifests
-    schedule:
-      interval: "weekly"
-    reviewers:
-    - "OnlyNico43"
-    
-  - package-ecosystem: "gomod" # See documentation for possible values
-    directory: "/lib/database" # Location of package manifests
-    schedule:
-      interval: "weekly"
-    reviewers:
-    - "OnlyNico43"
-    
-  - package-ecosystem: "gomod" # See documentation for possible values
-    directory: "/lib/jwt" # Location of package manifests
-    schedule:
-      interval: "weekly"
-    reviewers:
-    - "OnlyNico43"
-    
-  - package-ecosystem: "gomod" # See documentation for possible values
-    directory: "/lib/logger" # Location of package manifests
     schedule:
       interval: "weekly"
     reviewers:

@@ -1,0 +1,166 @@
+name: CI/CD
+on:
+  push:
+    branches:
+      - "**"
+  release:
+    types:
+      - "published"
+  pull_request:
+    branches:
+      - "**"
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  code-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+      - name: format-backend
+        run: gofmt -l -e backend
+      - name: format-websocket
+        run: gofmt -l -e websocket
+      - name: lint-backend
+        uses: golangci/golangci-lint-action@v6
+        with:
+          working-directory: backend
+      - name: lint-websocket
+        uses: golangci/golangci-lint-action@v6
+        with:
+          working-directory: websocket
+
+  build-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+      - name: build
+        run: cd cmd/backend && CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o ../../bin/easyflow-backend .
+      - name: upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}/bin/easyflow-backend
+          name: easyflow-backend-${{ github.sha }}
+          if-no-files-found: error
+
+  build-websocket:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+      - name: build
+        run: cd websocket && CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o ../bin/easyflow-websocket .
+      - name: upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ github.workspace }}/bin/easyflow-websocket
+          name: easyflow-websocket-${{ github.sha }}
+          if-no-files-found: error
+
+  docker-backend:
+    needs: [build-backend, code-quality]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: download artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ github.workspace }}/backend/bin/
+          name: easyflow-backend-${{ github.sha }}
+      - name: login to docker
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: set up docker buildx
+        uses: docker/setup-buildx-action@v3
+      - name: create image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ vars.DOCKER_REGISTRY }}/${{ vars.DOCKER_NAMESPACE }}/${{ vars.DOCKER_IMAGE_NAME_BACKEND }}
+          tags: |
+            type=raw,value=dev,enable=${{ github.ref_name == 'main' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+            type=raw,value=${{ github.ref_name }},enable=${{ github.event_name == 'release' }}
+      - name: build and push docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./bin/
+          file: ./Dockerfile-Backend
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          push: ${{ github.ref_name == 'main' || github.event_name == 'release'  }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  docker-websocket:
+    needs: [build-websocket, code-quality]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: download artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ github.workspace }}/websocket/bin/
+          name: easyflow-websocket-${{ github.sha }}
+      - name: login to docker
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: set up docker buildx
+        uses: docker/setup-buildx-action@v3
+      - name: create image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ vars.DOCKER_REGISTRY }}/${{ vars.DOCKER_NAMESPACE }}/${{ vars.DOCKER_IMAGE_NAME_WEBSOCKET }}
+          tags: |
+            type=raw,value=dev,enable=${{ github.ref_name == 'main' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+            type=raw,value=${{ github.ref_name }},enable=${{ github.event_name == 'release' }}
+      - name: build and push docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./bin/
+          file: ./Dockerfile-Websocket
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          push: ${{ github.ref_name == 'main' || github.event_name == 'release'  }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: [docker-backend, docker-websocket]
+    runs-on: ubuntu-latest
+    if: github.ref_name == 'main' || github.event_name == 'release'
+    steps:
+      - name: setup railway cli
+        run: npm i -g @railway/cli
+      - name: trigger redeploy on railway development backend
+        if: github.ref_name == 'main'
+        run: RAILWAY_TOKEN=${{ secrets.RAILWAY_DEV_TOKEN }} railway redeploy -s ${{ vars.RAILWAY_SERVICE_NAME_BACKEND }} -y
+      - name: trigger redeploy on railway development websocket
+        if: github.ref_name == 'main'
+        run: RAILWAY_TOKEN=${{ secrets.RAILWAY_DEV_TOKEN }} railway redeploy -s ${{ vars.RAILWAY_SERVICE_NAME_WEBSOCKET }} -y
+      - name: trigger redeploy on railway production backend
+        if: github.event_name == 'release'
+        run: RAILWAY_TOKEN=${{ secrets.RAILWAY_PROD_TOKEN }} railway redeploy -s ${{ vars.RAILWAY_SERVICE_NAME_BACKEND }} -y
+      - name: trigger redeploy on railway production websocket
+        if: github.event_name == 'release'
+        run: RAILWAY_TOKEN=${{ secrets.RAILWAY_PROD_TOKEN }} railway redeploy -s ${{ vars.RAILWAY_SERVICE_NAME_WEBSOCKET }} -y

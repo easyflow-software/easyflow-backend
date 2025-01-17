@@ -1,0 +1,19 @@
+FROM alpine:3.21
+
+WORKDIR /app
+
+# Add non-root user for security
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# Install CA certificates for HTTPS requests
+RUN apk --no-cache add ca-certificates tzdata
+
+# The binary will be copied here by the GitHub Action
+COPY ./bin/easyflow-websocket /app/easyflow-websocket
+
+# Set ownership to non-root user
+RUN chown -R appuser:appgroup /app
+
+USER appuser
+
+ENTRYPOINT ["/app/easyflow-websocket"]

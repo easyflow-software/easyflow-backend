@@ -1,3 +1,3 @@
 #!/bin/sh
 
-reflex -r '^websocket/(.*?).go|websocket/.env|lib/(.*?).go$' -s -- sh -c 'cd websocket && go run main.go'
+reflex -r '^cmd/websocket/(.*?).*|.env|pkg/(.*?).*$' -s -- sh -c 'cd cmd/websocket && go run main.go'

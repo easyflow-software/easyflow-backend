@@ -1,3 +1,3 @@
 #!/bin/sh
 
-reflex -r '^backend/(.*?).go|backend/.env|lib/(.*?).go$' -s -- sh -c 'cd backend && go run main.go'
+reflex -r '^cmd/backend/(.*?).*|.env|pkg/(.*?).*$' -s -- sh -c 'cd cmd/backend && go run main.go'

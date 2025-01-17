@@ -1,51 +1,20 @@
 repos:
   - repo: local
     hooks:
-    - id: gofmt-backend
-      name: gofmt backend
-      entry: bash -c 'cd backend && gofmt -w .'
-      language: system
-
-    - id: go-mod-tidy-backend
-      name: go mod tidy backend
-      entry: bash -c 'cd backend && go mod tidy'
-      language: system
-    
-    - id: golangci-lint-backend
-      name: golangci lint backend
-      entry: bash -c 'cd backend && golangci-lint run'
+    - id: gofmt
+      name: gofmt
+      entry: sh -c 'gofmt -w .'
       language: system
       require_serial: true
-    
-    - id: gofmt-websocket
-      name: gofmt websocket
-      entry: bash -c 'cd websocket && gofmt -w .'
-      language: system
 
-    - id: go-mod-tidy-websocket
-      name: go mod tidy websocket
-      entry: bash -c 'cd websocket && go mod tidy'
+    - id: go-mod-tidy
+      name: go mod tidy
+      entry: sh -c 'go mod tidy'
       language: system
     
-    - id: golangci-lint-websocket
-      name: golangci lint websocket
-      entry: bash -c 'cd websocket && golangci-lint run'
-      language: system
-      require_serial: true
-      
-    - id: gofmt-lib/database
-      name: gofmt lib/database
-      entry: bash -c 'cd lib/database && gofmt -w .'
-      language: system
-
-    - id: go-mod-tidy-lib/database
-      name: go mod tidy lib/database
-      entry: bash -c 'cd lib/database && go mod tidy'
-      language: system
-    
-    - id: golangci-lint-lib/database
-      name: golangci lint lib/database
-      entry: bash -c 'cd lib/database && golangci-lint run'
+    - id: golangci-lint
+      name: golangci lint
+      entry: sh -c 'golangci-lint run'
       language: system
       require_serial: true
       
