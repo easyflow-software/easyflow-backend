@@ -1,13 +1,12 @@
 package middleware
 
 import (
-	"easyflow-backend/pkg/api/errors"
-	"easyflow-backend/pkg/config"
-	"easyflow-backend/pkg/enum"
-
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"easyflow-backend/pkg/api/errors"
+	"easyflow-backend/pkg/config"
+	"easyflow-backend/pkg/enum"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -19,16 +18,19 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// Stores rate limiting data for a single user
 type UserLimit struct {
 	Limiter     *rate.Limiter
 	LastRequest time.Time
 }
 
+// Creates a rate limiting middleware that restricts requests per user.
+// Uses signed cookies to identify users and applies rate limiting based on the provided limit and burst parameters.
 func NewRateLimiter(limit float64, burst int) gin.HandlerFunc {
 	userLimitMap := make(map[string]UserLimit)
 	var userLimitMapMutex sync.RWMutex
 
-	// Cleanup function to remove old entries from the map
+	// Start cleanup goroutine
 	go func() {
 		for {
 			time.Sleep(time.Minute)
@@ -90,12 +92,13 @@ func NewRateLimiter(limit float64, burst int) gin.HandlerFunc {
 			c.Next()
 		}
 	}
+
 }
 
+// Retrieves or creates a rate limiter for the given user ID
 func getUserLimiter(userID string, limit float64, burst int, userLimitMap map[string]UserLimit, mutex *sync.RWMutex) UserLimit {
 	mutex.Lock()
 	defer mutex.Unlock()
-
 	limiter, exists := userLimitMap[userID]
 	if !exists {
 		limiter = UserLimit{
@@ -104,18 +107,16 @@ func getUserLimiter(userID string, limit float64, burst int, userLimitMap map[st
 		}
 		userLimitMap[userID] = limiter
 	} else {
-		// Update the last request time
 		limiter.LastRequest = time.Now()
 		userLimitMap[userID] = limiter
 	}
-
 	return limiter
 }
 
+// Removes rate limiters that haven't been used in the last minute
 func cleanupOldEntries(userLimitMap map[string]UserLimit, mutex *sync.RWMutex) {
 	mutex.Lock()
 	defer mutex.Unlock()
-
 	cutoff := time.Now().Add(-time.Minute)
 	for userID, limiter := range userLimitMap {
 		if limiter.LastRequest.Before(cutoff) {
@@ -124,6 +125,7 @@ func cleanupOldEntries(userLimitMap map[string]UserLimit, mutex *sync.RWMutex) {
 	}
 }
 
+// Creates a random hex string to use as a user identifier
 func generateUniqueID() string {
 	bytes := make([]byte, 16)
 	_, err := rand.Read(bytes)
@@ -133,26 +135,25 @@ func generateUniqueID() string {
 	return hex.EncodeToString(bytes)
 }
 
+// Creates an HMAC signature using the app's cookie secret
 func signCookie(data string, cfg *config.Config) string {
 	h := hmac.New(sha256.New, []byte(cfg.CookieSecret))
 	h.Write([]byte(data))
 	return data + "." + hex.EncodeToString(h.Sum(nil))
 }
 
+// Validates the HMAC signature and returns the original data
 func verifyCookie(signedData string, cfg *config.Config) (string, error) {
 	parts := strings.Split(signedData, ".")
 	if len(parts) != 2 {
 		return "", fmt.Errorf("invalid cookie format")
 	}
-
 	data, signature := parts[0], parts[1]
 	h := hmac.New(sha256.New, []byte(cfg.CookieSecret))
 	h.Write([]byte(data))
-
 	expectedSignature := hex.EncodeToString(h.Sum(nil))
 	if !hmac.Equal([]byte(signature), []byte(expectedSignature)) {
 		return "", fmt.Errorf("invalid signature")
 	}
-
 	return data, nil
 }

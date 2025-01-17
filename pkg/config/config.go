@@ -58,7 +58,7 @@ func getEnvInt(key string, fallback int) int {
 	return fallback
 }
 
-// LoadDefaultConfig loads the default configuration values.
+// Loads the default configuration values.
 // It reads the environment variables from the .env file, if present,
 // and returns a Config struct with the loaded values.
 func LoadDefaultConfig() *Config {
@@ -69,12 +69,13 @@ func LoadDefaultConfig() *Config {
 
 	return &Config{
 		// Application
-		Stage:       getEnv("STAGE", "development"),
-		LogLevel:    logger.LogLevel(getEnv("LOG_LEVEL", "DEBUG")),
-		Port:        getEnv("PORT", "4000"),
-		DebugMode:   getEnv("DEBUG_MODE", "false") == "true",
-		FrontendURL: getEnv("FRONTEND_URL", "http://localhost:3000"),
-		Domain:      getEnv("DOMAIN", "localhost"),
+		Stage:        getEnv("STAGE", "development"),
+		LogLevel:     logger.LogLevel(getEnv("LOG_LEVEL", "DEBUG")),
+		Port:         getEnv("PORT", "4000"),
+		DebugMode:    getEnv("DEBUG_MODE", "false") == "true",
+		FrontendURL:  getEnv("FRONTEND_URL", "http://localhost:3000"),
+		Domain:       getEnv("DOMAIN", "localhost"),
+		CookieSecret: getEnv("COOKIE_SECRET", "cookie_secret"),
 		//Database
 		DatabaseURL: getEnv("DATABASE_URL", ""),
 		// Crypto

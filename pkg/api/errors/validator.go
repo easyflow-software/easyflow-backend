@@ -13,24 +13,25 @@ var (
 	Trans    ut.Translator
 )
 
+// Initializes the validator and translator with English locale.
+// It sets up the validator instance and registers default English translations.
+// Panics if registration of translations fails.
 func init() {
 	enLocale := en.New()
 	uni = ut.New(enLocale, enLocale)
 	Validate = validator.New()
 	Trans, _ = uni.GetTranslator("en")
-
 	if err := en_lang.RegisterDefaultTranslations(Validate, Trans); err != nil {
 		panic("Failed to register default translations: " + err.Error())
 	}
 }
 
+// TranslateError converts validation errors into human readable messages.
 func TranslateError(err error) []string {
 	errs := err.(validator.ValidationErrors)
 	translatedErrors := make([]string, 0, len(errs))
-
 	for _, e := range errs {
 		translatedErrors = append(translatedErrors, e.Translate(Trans))
 	}
-
 	return translatedErrors
 }
