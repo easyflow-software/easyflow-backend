@@ -1,0 +1,12 @@
+cmd
+.env
+example.env
+.git
+.github
+.gitignore
+go.mod
+go.sum
+pkg
+.pre-commit-config.yaml
+README.md
+scripts
