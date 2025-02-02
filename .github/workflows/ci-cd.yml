@@ -18,18 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-      - name: format-backend
-        run: gofmt -l -e backend
-      - name: format-websocket
-        run: gofmt -l -e websocket
-      - name: lint-backend
+      - name: gofmt
+        run: gofmt -l -e .
+      - name: lint
         uses: golangci/golangci-lint-action@v6
         with:
-          working-directory: backend
-      - name: lint-websocket
-        uses: golangci/golangci-lint-action@v6
-        with:
-          working-directory: websocket
+          working-directory: ./
 
   build-backend:
     runs-on: ubuntu-latest
@@ -51,7 +45,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
       - name: build
-        run: cd websocket && CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o ../bin/easyflow-websocket .
+        run: cd cmd/websocket && CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o ../bin/easyflow-websocket .
       - name: upload artifact
         uses: actions/upload-artifact@v4
         with:
