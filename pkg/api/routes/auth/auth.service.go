@@ -19,7 +19,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func loginService(db *gorm.DB, cfg *config.Config, payload *LoginRequest, ip string, logger *logger.Logger) (*jwt.JWTPair, *database.User, *errors.ApiError) {
+func loginService(db *gorm.DB, cfg *config.Config, payload LoginRequest, ip string, logger *logger.Logger) (*jwt.JWTPair, *database.User, *errors.ApiError) {
 	ok, checkTurnstileErr := turnstile.CheckCloudflareTurnstile(logger, cfg, ip, payload.TurnstileToken)
 	if !ok {
 		return nil, nil, checkTurnstileErr

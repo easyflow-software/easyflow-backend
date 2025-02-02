@@ -13,8 +13,8 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/joho/godotenv v1.5.1
 	github.com/minio/minio-go/v7 v7.0.83
+	github.com/valkey-io/valkey-go v1.0.53
 	golang.org/x/crypto v0.32.0
-	golang.org/x/time v0.9.0
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/gorm v1.25.12
 )

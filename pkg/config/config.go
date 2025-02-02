@@ -1,43 +1,43 @@
 package config
 
 import (
-	"easyflow-backend/pkg/logger"
-
 	"fmt"
 	"os"
 	"strconv"
 
+	"easyflow-backend/pkg/logger"
+
 	"github.com/joho/godotenv"
-	"gorm.io/gorm"
 )
 
 type Config struct {
-	// stage
-	Stage string
-	// log level
-	LogLevel logger.LogLevel
-	//gorm
-	GormConfig gorm.Config
-	//env
+	// Application
+	Stage        string
+	LogLevel     logger.LogLevel
+	Port         string
+	DebugMode    bool
+	FrontendURL  string
+	Domain       string
+	CookieSecret string
+	// Database
 	DatabaseURL string
-	SaltRounds  int
-	Port        string
-	DebugMode   bool
-	//jwt
+	// Valkey
+	ValkeyURL        string
+	ValkeyUsername   string
+	ValkeyPassword   string
+	ValkeyClientName string
+	// Crypto
+	SaltRounds int
+	// jwt
 	JwtSecret             string
 	JwtExpirationTime     int
 	RefreshExpirationTime int
-	// Cookie
-	CookieSecret string
-	// s3
+	// Minio
 	BucketURL                string
 	BucketAccessKeyId        string
 	BucketSecret             string
 	ProfilePictureBucketName string
-	// app
-	FrontendURL string
-	Domain      string
-	// Cloudflare Turnstile
+	// Turnstile
 	TurnstileUrl    string
 	TurnstileSecret string
 }
@@ -73,15 +73,20 @@ func LoadDefaultConfig() *Config {
 		LogLevel:     logger.LogLevel(getEnv("LOG_LEVEL", "DEBUG")),
 		Port:         getEnv("PORT", "4000"),
 		DebugMode:    getEnv("DEBUG_MODE", "false") == "true",
-		FrontendURL:  getEnv("FRONTEND_URL", "http://localhost:3000"),
-		Domain:       getEnv("DOMAIN", "localhost"),
+		FrontendURL:  getEnv("FRONTEND_URL", ""),
+		Domain:       getEnv("DOMAIN", ""),
 		CookieSecret: getEnv("COOKIE_SECRET", "cookie_secret"),
 		//Database
 		DatabaseURL: getEnv("DATABASE_URL", ""),
+		// Valkey
+		ValkeyURL:        getEnv("VALKEY_URL", ""),
+		ValkeyUsername:   getEnv("VALKEY_USERNAME", ""),
+		ValkeyPassword:   getEnv("VALKEY_PASSWORD", ""),
+		ValkeyClientName: getEnv("VALKEY_CLIENT_NAME", ""),
 		// Crypto
 		SaltRounds: getEnvInt("SALT_OR_ROUNDS", 10),
 		// JWT
-		JwtSecret:             getEnv("JWT_SECRET", "public_secret"),
+		JwtSecret:             getEnv("JWT_SECRET", ""),
 		JwtExpirationTime:     getEnvInt("JWT_EXPIRATION_TIME", 60*10),          // 10 minutes
 		RefreshExpirationTime: getEnvInt("REFRESH_EXPIRATION_TIME", 60*60*24*7), // 1 week
 		// Minio

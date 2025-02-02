@@ -9,20 +9,21 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"github.com/valkey-io/valkey-go"
 	"gorm.io/gorm"
 )
 
 type AnyStruct struct{}
 
-func getPayload[T any](c *gin.Context) (*T, error) {
+func getPayload[T any](c *gin.Context) (T, error) {
 	var payload T
 
 	if err := c.ShouldBind(&payload); err != nil && err.Error() != "EOF" {
 		// Handle binding errors, but ignore io.EOF which occurs when the body is empty
-		return nil, err
+		return payload, err
 	}
 
-	return &payload, nil
+	return payload, nil
 }
 
 func getDatabse(c *gin.Context) (*gorm.DB, error) {
@@ -67,7 +68,21 @@ func getLogger(c *gin.Context) (*logger.Logger, error) {
 	return logger, nil
 }
 
-func SetupEndpoint[T any](c *gin.Context) (*T, *logger.Logger, *gorm.DB, *config.Config, []string) {
+func getValkey(c *gin.Context) (valkey.Client, error) {
+	raw_valkey, ok := c.Get("valkey")
+	if !ok {
+		return nil, fmt.Errorf("Valkey not found in context")
+	}
+
+	valkey, ok := raw_valkey.(valkey.Client)
+	if !ok {
+		return nil, fmt.Errorf("type assertion to *valkey.Client failed")
+	}
+
+	return valkey, nil
+}
+
+func SetupEndpoint[T any](c *gin.Context) (T, *logger.Logger, *gorm.DB, *config.Config, valkey.Client, []string) {
 	var errs []error
 	payload, err := getPayload[T](c)
 	if err != nil {
@@ -89,6 +104,11 @@ func SetupEndpoint[T any](c *gin.Context) (*T, *logger.Logger, *gorm.DB, *config
 		errs = append(errs, err)
 	}
 
+	valkeyClient, err := getValkey(c)
+	if err != nil {
+		errs = append(errs, err)
+	}
+
 	var serializableErrors []string
 
 	for _, e := range errs {
@@ -100,5 +120,5 @@ func SetupEndpoint[T any](c *gin.Context) (*T, *logger.Logger, *gorm.DB, *config
 		}
 	}
 
-	return payload, logger, db, cfg, serializableErrors
+	return payload, logger, db, cfg, valkeyClient, serializableErrors
 }

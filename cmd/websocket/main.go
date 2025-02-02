@@ -1,14 +1,18 @@
 package main
 
 import (
-	"easyflow-backend/pkg/config"   // Application configuration
-	"easyflow-backend/pkg/database" // Database connection and operations
-	"easyflow-backend/pkg/jwt"      // JWT token validation
-	"easyflow-backend/pkg/logger"   // Custom logging implementation
-	"easyflow-backend/pkg/socket"   // WebSocket functionality
 	"net/http"
 	"os"
 	"time"
+
+	"easyflow-backend/pkg/config"
+	"easyflow-backend/pkg/database"
+	"easyflow-backend/pkg/jwt"
+	"easyflow-backend/pkg/logger"
+	"easyflow-backend/pkg/socket"
+
+	"gorm.io/gorm"
+	gormLogger "gorm.io/gorm/logger"
 )
 
 func main() {
@@ -18,6 +22,15 @@ func main() {
 	// Load application configuration
 	var cfg = config.LoadDefaultConfig()
 
+	var logLevel gormLogger.LogLevel
+	// Configure application mode and database logging based on debug setting
+	if !cfg.DebugMode {
+		log.PrintfInfo("Starting in release mode")
+		logLevel = gormLogger.Silent
+	} else {
+		log.PrintfInfo("Starting in debug mode")
+		logLevel = gormLogger.Info
+	}
 	// Database connection retry logic
 	var isConnected = false
 	var dbInst *database.DatabaseInst
@@ -27,7 +40,7 @@ func main() {
 	// Attempt database connection with exponential backoff
 	for !isConnected {
 		var err error
-		dbInst, err = database.NewDatabaseInst(cfg.DatabaseURL, &cfg.GormConfig)
+		dbInst, err = database.NewDatabaseInst(cfg.DatabaseURL, &gorm.Config{Logger: gormLogger.Default.LogMode(logLevel)})
 		if err != nil {
 			if connectionAttempts <= 5 {
 				connectionAttempts++
@@ -85,7 +98,7 @@ func main() {
 	})
 
 	// Start the WebSocket server
-	log.Printf("WebSocket server starting on :8080")
+	log.PrintfInfo("WebSocket server starting on :8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.PrintfError("ListenAndServe: %s", err)
 	}

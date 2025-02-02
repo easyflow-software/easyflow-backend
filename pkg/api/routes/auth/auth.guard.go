@@ -1,9 +1,9 @@
 package auth
 
 import (
+	"easyflow-backend/pkg/api/endpoint"
 	"easyflow-backend/pkg/api/errors"
 	"easyflow-backend/pkg/database"
-	"easyflow-backend/pkg/endpoint"
 	"easyflow-backend/pkg/enum"
 	"easyflow-backend/pkg/jwt"
 
@@ -17,7 +17,7 @@ import (
 
 func AuthGuard() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		_, logger, _, cfg, errs := endpoint.SetupEndpoint[any](c)
+		_, logger, _, cfg, _, errs := endpoint.SetupEndpoint[any](c)
 		if errs != nil {
 			c.JSON(http.StatusInternalServerError, errors.ApiError{
 				Code:    http.StatusInternalServerError,
@@ -87,7 +87,7 @@ func AuthGuard() gin.HandlerFunc {
 
 func RefreshAuthGuard() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		_, logger, db, cfg, errs := endpoint.SetupEndpoint[any](c)
+		_, logger, db, cfg, _, errs := endpoint.SetupEndpoint[any](c)
 		if errs != nil {
 			c.JSON(http.StatusInternalServerError, errors.ApiError{
 				Code:    http.StatusInternalServerError,

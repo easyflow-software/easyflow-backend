@@ -13,7 +13,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func createChat(db *gorm.DB, payload *CreateChatRequest, jwtPayload *jwt.JWTTokenPayload, logger *logger.Logger) (*ChatResponse, *errors.ApiError) {
+func createChat(db *gorm.DB, payload CreateChatRequest, jwtPayload *jwt.JWTTokenPayload, logger *logger.Logger) (*ChatResponse, *errors.ApiError) {
 	chat := database.Chat{
 		Name:        payload.Name,
 		Description: payload.Description,
@@ -74,6 +74,7 @@ func createChat(db *gorm.DB, payload *CreateChatRequest, jwtPayload *jwt.JWTToke
 	}
 
 	key := chatUserKeys[keyIndex].Key
+	iv := chatUserKeys[keyIndex].Iv
 
 	return &ChatResponse{
 		Id:          chat.ID,
@@ -83,6 +84,7 @@ func createChat(db *gorm.DB, payload *CreateChatRequest, jwtPayload *jwt.JWTToke
 		Picture:     chat.Picture,
 		Description: chat.Description,
 		Key:         key,
+		Iv:          iv,
 	}, nil
 }
 

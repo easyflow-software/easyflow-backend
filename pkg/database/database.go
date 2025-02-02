@@ -1,9 +1,10 @@
 package database
 
 import (
+	"time"
+
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 type DatabaseInst struct {
@@ -15,6 +16,14 @@ func NewDatabaseInst(url string, config *gorm.Config) (*DatabaseInst, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetMaxOpenConns(500)
+	sqlDB.SetConnMaxLifetime(time.Hour)
 
 	err = db.SetupJoinTable(&User{}, "Chats", &ChatsUsers{})
 	if err != nil {
@@ -34,8 +43,4 @@ func (d *DatabaseInst) GetClient() *gorm.DB {
 
 func (d *DatabaseInst) Migrate() error {
 	return d.client.AutoMigrate(&Message{}, &Chat{}, &User{}, &ChatsUsers{}, &UserKeys{})
-}
-
-func (d *DatabaseInst) SetLogMode(mode logger.LogLevel) {
-	d.client.Logger.LogMode(mode)
 }

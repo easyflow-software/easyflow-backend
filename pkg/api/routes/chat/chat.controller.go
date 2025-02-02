@@ -1,12 +1,13 @@
 package chat
 
 import (
+	"easyflow-backend/pkg/api/endpoint"
 	"easyflow-backend/pkg/api/errors"
 	"easyflow-backend/pkg/api/middleware"
 	"easyflow-backend/pkg/api/routes/auth"
-	"easyflow-backend/pkg/endpoint"
 	"easyflow-backend/pkg/enum"
 	"easyflow-backend/pkg/jwt"
+	"time"
 
 	"net/http"
 
@@ -16,14 +17,14 @@ import (
 func RegisterChatEndpoints(r *gin.RouterGroup) {
 	r.Use(middleware.LoggerMiddleware("Chat"))
 	r.Use(auth.AuthGuard())
-	r.Use(middleware.NewRateLimiter(1, 5))
+	r.Use(middleware.RateLimiterMiddleware(250, 10*time.Minute))
 	r.POST("/", createChatController)
 	r.GET("/preview", getChatPreviewsController)
 	r.GET("/:chatId", getChatByIdController)
 }
 
 func createChatController(c *gin.Context) {
-	payload, logger, db, _, errs := endpoint.SetupEndpoint[CreateChatRequest](c)
+	payload, logger, db, _, _, errs := endpoint.SetupEndpoint[CreateChatRequest](c)
 	if len(errs) > 0 {
 		c.JSON(http.StatusInternalServerError, errors.ApiError{
 			Code:    http.StatusInternalServerError,
@@ -54,7 +55,7 @@ func createChatController(c *gin.Context) {
 }
 
 func getChatPreviewsController(c *gin.Context) {
-	_, logger, db, _, errs := endpoint.SetupEndpoint[any](c)
+	_, logger, db, _, _, errs := endpoint.SetupEndpoint[any](c)
 	if len(errs) > 0 {
 		c.JSON(http.StatusInternalServerError, errors.ApiError{
 			Code:    http.StatusInternalServerError,
@@ -83,7 +84,7 @@ func getChatPreviewsController(c *gin.Context) {
 }
 
 func getChatByIdController(c *gin.Context) {
-	_, logger, db, _, errs := endpoint.SetupEndpoint[any](c)
+	_, logger, db, _, _, errs := endpoint.SetupEndpoint[any](c)
 	if len(errs) > 0 {
 		c.JSON(http.StatusInternalServerError, errors.ApiError{
 			Code:    http.StatusInternalServerError,

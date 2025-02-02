@@ -34,6 +34,7 @@ type ChatResponse struct {
 	Picture     *string `json:"picture"`
 	Description *string `json:"description"`
 	Key         string  `json:"key"`
+	Iv          string  `json:"iv"`
 }
 
 type GetChatByIdResponse struct {

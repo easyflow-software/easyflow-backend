@@ -8,12 +8,16 @@ import (
 	"easyflow-backend/pkg/config"          // Application configuration
 	"easyflow-backend/pkg/database"        // Database connection and operations
 	"easyflow-backend/pkg/logger"          // Custom logging implementation
-	cors "github.com/OnlyNico43/gin-cors"  // CORS middleware
-	"github.com/gin-gonic/gin"             // Web framework
-	gormLogger "gorm.io/gorm/logger"       // Database logging
+	"easyflow-backend/pkg/retry"
 	"os"
 	"strings"
 	"time"
+
+	cors "github.com/OnlyNico43/gin-cors" // CORS middleware
+	"github.com/gin-gonic/gin"            // Web framework
+	"github.com/valkey-io/valkey-go"
+	"gorm.io/gorm"
+	gormLogger "gorm.io/gorm/logger" // Database logging
 )
 
 func main() {
@@ -23,39 +27,52 @@ func main() {
 	// Initialize logger for the main package
 	log := logger.NewLogger(os.Stdout, "Main", cfg.LogLevel, "System")
 
-	// Database connection retry logic
-	var isConnected = false
-	var dbInst *database.DatabaseInst
-	var connectionAttempts = 0
-	var connectionPause = 5 // Initial pause duration in seconds
-
-	// Attempt database connection with exponential backoff
-	for !isConnected {
-		var err error
-		dbInst, err = database.NewDatabaseInst(cfg.DatabaseURL, &cfg.GormConfig)
-		if err != nil {
-			if connectionAttempts <= 5 {
-				connectionAttempts++
-				log.PrintfError("Failed to connect to database, retrying in %d seconds. Attempt %d", connectionPause, connectionAttempts)
-				time.Sleep(time.Duration(connectionPause) * time.Second)
-				connectionPause += 5 // Increase pause duration for next attempt
-			} else {
-				panic(err) // Give up after 5 attempts
-			}
-		} else {
-			isConnected = true
-		}
-	}
-
+	var logLevel gormLogger.LogLevel
 	// Configure application mode and database logging based on debug setting
 	if !cfg.DebugMode {
+		log.PrintfInfo("Starting in release mode")
 		gin.SetMode(gin.ReleaseMode)
-		dbInst.SetLogMode(gormLogger.Silent)
+		logLevel = gormLogger.Silent
+	} else {
+		log.PrintfInfo("Starting in debug mode")
+		gin.SetMode(gin.DebugMode)
+		logLevel = gormLogger.Info
+	}
+
+	var err error
+
+	connectToDatabase := retry.WithRetry(func() (*database.DatabaseInst, error) {
+		return database.NewDatabaseInst(cfg.DatabaseURL, &gorm.Config{
+			Logger: gormLogger.Default.LogMode(logLevel),
+		})
+	}, log, nil)
+
+	dbInst, err := connectToDatabase()
+	if err != nil {
+		log.PrintfError("Failed to connect to database: %s", err)
+		panic(err)
 	}
 
 	// Run database migrations
-	err := dbInst.Migrate()
+	err = dbInst.Migrate()
 	if err != nil {
+		panic(err)
+	}
+
+	// Set up valkey connection
+	connectValkeyClient := retry.WithRetry(func() (valkey.Client, error) {
+		return valkey.NewClient(valkey.ClientOption{
+			Username:    cfg.ValkeyUsername,
+			Password:    cfg.ValkeyPassword,
+			ClientName:  cfg.ValkeyClientName,
+			InitAddress: []string{cfg.ValkeyURL},
+		})
+	}, log, nil)
+
+	valkeyClient, err := connectValkeyClient()
+
+	if err != nil {
+		log.PrintfError("Failed to connect to Valkey: %s", err)
 		panic(err)
 	}
 
@@ -74,7 +91,7 @@ func main() {
 	router.RedirectTrailingSlash = true // Automatically handle trailing slashes
 
 	// Set up CORS middleware
-	log.Printf("Frontend URL for cors: %s", cfg.FrontendURL)
+	log.PrintfInfo("Frontend URL for cors: %s", cfg.FrontendURL)
 	router.Use(cors.CorsMiddleware(cors.Config{
 		AllowedOrigins:   strings.Split(cfg.FrontendURL, ", "),
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE"},
@@ -87,29 +104,30 @@ func main() {
 	// Add middleware for database access, configuration, and panic recovery
 	router.Use(middleware.DatabaseMiddleware(dbInst.GetClient()))
 	router.Use(middleware.ConfigMiddleware(cfg))
+	router.Use(middleware.ValkeyMiddleware(valkeyClient))
 	router.Use(gin.Recovery())
 
 	// Register API endpoints by feature group
 	userEndpoints := router.Group("/user")
 	{
-		log.Printf("Registering user endpoints")
+		log.PrintfInfo("Registering user endpoints")
 		user.RegisterUserEndpoints(userEndpoints)
 	}
 
 	authEndpoints := router.Group("/auth")
 	{
-		log.Printf("Registering auth endpoints")
+		log.PrintfInfo("Registering auth endpoints")
 		auth.RegisterAuthEndpoints(authEndpoints)
 	}
 
 	chatEndpoints := router.Group("/chat")
 	{
-		log.Printf("Registering chat endpoints")
+		log.PrintfInfo("Registering chat endpoints")
 		chat.RegisterChatEndpoints(chatEndpoints)
 	}
 
 	// Start the HTTP server
-	log.Printf("Starting server on port %s", cfg.Port)
+	log.PrintfInfo("Starting server on port %s", cfg.Port)
 	if err := router.Run(":" + cfg.Port); err != nil {
 		log.PrintfError("Failed to start server: %s", err)
 		return

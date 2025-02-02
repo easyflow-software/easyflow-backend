@@ -1,11 +1,12 @@
 package auth
 
 import (
+	"easyflow-backend/pkg/api/endpoint"
 	"easyflow-backend/pkg/api/errors"
 	"easyflow-backend/pkg/api/middleware"
-	"easyflow-backend/pkg/endpoint"
 	"easyflow-backend/pkg/enum"
 	"easyflow-backend/pkg/jwt"
+	"time"
 
 	"net/http"
 
@@ -14,15 +15,15 @@ import (
 
 func RegisterAuthEndpoints(r *gin.RouterGroup) {
 	r.Use(middleware.LoggerMiddleware("Auth"))
-	r.Use(middleware.NewRateLimiter(1, 2))
+	r.Use(middleware.RateLimiterMiddleware(100, 10*time.Minute))
 	r.POST("/login", loginController)
 	r.GET("/check", AuthGuard(), checkLoginController)
-	r.GET("/refresh", middleware.NewRateLimiter(0.5, 0), RefreshAuthGuard(), refreshController)
+	r.GET("/refresh", middleware.RateLimiterMiddleware(25, 10*time.Minute), RefreshAuthGuard(), refreshController)
 	r.GET("/logout", AuthGuard(), logoutController)
 }
 
 func loginController(c *gin.Context) {
-	payload, logger, db, cfg, errs := endpoint.SetupEndpoint[LoginRequest](c)
+	payload, logger, db, cfg, _, errs := endpoint.SetupEndpoint[LoginRequest](c)
 	if len(errs) > 0 {
 		c.JSON(http.StatusInternalServerError, errors.ApiError{
 			Code:    http.StatusInternalServerError,
@@ -40,13 +41,13 @@ func loginController(c *gin.Context) {
 
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("access_token", tokens.AccessToken, cfg.JwtExpirationTime, "/", cfg.Domain, cfg.Stage == "production", true)
-	c.SetCookie("refresh_token", tokens.RefreshToken, cfg.RefreshExpirationTime, "/", cfg.Domain, cfg.Stage == "production", true)
+	c.SetCookie("refresh_token", tokens.RefreshToken, cfg.RefreshExpirationTime, "/auth/refresh", cfg.Domain, cfg.Stage == "production", true)
 
 	c.JSON(200, user)
 }
 
 func checkLoginController(c *gin.Context) {
-	_, logger, _, _, errs := endpoint.SetupEndpoint[any](c)
+	_, logger, _, _, _, errs := endpoint.SetupEndpoint[any](c)
 	if len(errs) > 0 {
 		c.JSON(http.StatusInternalServerError, errors.ApiError{
 			Code:    http.StatusInternalServerError,
@@ -73,7 +74,7 @@ func checkLoginController(c *gin.Context) {
 }
 
 func refreshController(c *gin.Context) {
-	_, logger, db, cfg, errs := endpoint.SetupEndpoint[any](c)
+	_, logger, db, cfg, _, errs := endpoint.SetupEndpoint[any](c)
 	if len(errs) > 0 {
 		c.JSON(http.StatusInternalServerError, errors.ApiError{
 			Code:    http.StatusInternalServerError,
@@ -101,7 +102,7 @@ func refreshController(c *gin.Context) {
 
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("access_token", tokens.AccessToken, cfg.JwtExpirationTime, "/", cfg.Domain, cfg.Stage == "production", true)
-	c.SetCookie("refresh_token", tokens.RefreshToken, cfg.RefreshExpirationTime, "/", cfg.Domain, cfg.Stage == "production", true)
+	c.SetCookie("refresh_token", tokens.RefreshToken, cfg.RefreshExpirationTime, "/auth/refresh", cfg.Domain, cfg.Stage == "production", true)
 
 	c.JSON(200, gin.H{
 		"accessTokenExpiresIn": cfg.JwtExpirationTime,
@@ -109,7 +110,7 @@ func refreshController(c *gin.Context) {
 }
 
 func logoutController(c *gin.Context) {
-	_, logger, db, cfg, errs := endpoint.SetupEndpoint[any](c)
+	_, logger, db, cfg, _, errs := endpoint.SetupEndpoint[any](c)
 	if len(errs) > 0 {
 		c.JSON(http.StatusInternalServerError, errors.ApiError{
 			Code:    http.StatusInternalServerError,
@@ -146,7 +147,7 @@ func logoutController(c *gin.Context) {
 
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("access_token", "", -1, "/", cfg.Domain, cfg.Stage == "production", true)
-	c.SetCookie("refresh_token", "", -1, "/", cfg.Domain, cfg.Stage == "production", true)
+	c.SetCookie("refresh_token", "", -1, "/auth/refresh", cfg.Domain, cfg.Stage == "production", true)
 
 	c.JSON(200, gin.H{})
 }

@@ -1,12 +1,13 @@
 package user
 
 import (
+	"easyflow-backend/pkg/api/endpoint"
 	"easyflow-backend/pkg/api/errors"
 	"easyflow-backend/pkg/api/middleware"
 	"easyflow-backend/pkg/api/routes/auth"
-	"easyflow-backend/pkg/endpoint"
 	"easyflow-backend/pkg/enum"
 	"easyflow-backend/pkg/jwt"
+	"time"
 
 	"net/http"
 
@@ -15,8 +16,8 @@ import (
 
 func RegisterUserEndpoints(r *gin.RouterGroup) {
 	r.Use(middleware.LoggerMiddleware("User"))
-	r.Use(middleware.NewRateLimiter(1, 2))
-	r.POST("/signup", middleware.NewRateLimiter(1, 0), createUserController)
+	r.Use(middleware.RateLimiterMiddleware(100, 10*time.Minute))
+	r.POST("/signup", middleware.RateLimiterMiddleware(10, 10*time.Minute), createUserController)
 	r.GET("/", auth.AuthGuard(), getUserController)
 	r.GET("/exists/:email", userExists)
 	r.GET("/profile-picture", auth.AuthGuard(), getProfilePictureController)
@@ -26,7 +27,7 @@ func RegisterUserEndpoints(r *gin.RouterGroup) {
 }
 
 func createUserController(c *gin.Context) {
-	payload, logger, db, cfg, errs := endpoint.SetupEndpoint[CreateUserRequest](c)
+	payload, logger, db, cfg, _, errs := endpoint.SetupEndpoint[CreateUserRequest](c)
 	if len(errs) > 0 {
 		c.JSON(http.StatusInternalServerError, errors.ApiError{
 			Code:    http.StatusInternalServerError,
@@ -45,7 +46,7 @@ func createUserController(c *gin.Context) {
 }
 
 func getUserController(c *gin.Context) {
-	_, logger, db, _, errs := endpoint.SetupEndpoint[any](c)
+	_, logger, db, _, _, errs := endpoint.SetupEndpoint[any](c)
 	if len(errs) > 0 {
 		c.JSON(http.StatusInternalServerError, errors.ApiError{
 			Code:    http.StatusInternalServerError,
@@ -74,7 +75,7 @@ func getUserController(c *gin.Context) {
 }
 
 func getProfilePictureController(c *gin.Context) {
-	_, logger, db, _, errs := endpoint.SetupEndpoint[any](c)
+	_, logger, db, _, _, errs := endpoint.SetupEndpoint[any](c)
 	if len(errs) > 0 {
 		c.JSON(http.StatusInternalServerError, errors.ApiError{
 			Code:    http.StatusInternalServerError,
@@ -104,7 +105,7 @@ func getProfilePictureController(c *gin.Context) {
 }
 
 func userExists(c *gin.Context) {
-	_, logger, db, _, errs := endpoint.SetupEndpoint[any](c)
+	_, logger, db, _, _, errs := endpoint.SetupEndpoint[any](c)
 	if len(errs) > 0 {
 		c.JSON(http.StatusInternalServerError, errors.ApiError{
 			Code:    http.StatusInternalServerError,
@@ -134,7 +135,7 @@ func userExists(c *gin.Context) {
 }
 
 func updateUserController(c *gin.Context) {
-	payload, logger, db, _, errs := endpoint.SetupEndpoint[UpdateUserRequest](c)
+	payload, logger, db, _, _, errs := endpoint.SetupEndpoint[UpdateUserRequest](c)
 	if len(errs) > 0 {
 		c.JSON(http.StatusInternalServerError, errors.ApiError{
 			Code:    http.StatusInternalServerError,
@@ -163,7 +164,7 @@ func updateUserController(c *gin.Context) {
 }
 
 func uploadProfilePictureController(c *gin.Context) {
-	_, logger, db, cfg, errs := endpoint.SetupEndpoint[any](c)
+	_, logger, db, cfg, _, errs := endpoint.SetupEndpoint[any](c)
 	if len(errs) > 0 {
 		c.JSON(http.StatusInternalServerError, errors.ApiError{
 			Code:    http.StatusInternalServerError,
@@ -192,7 +193,7 @@ func uploadProfilePictureController(c *gin.Context) {
 }
 
 func deleteUserController(c *gin.Context) {
-	_, logger, db, _, errs := endpoint.SetupEndpoint[CreateUserRequest](c)
+	_, logger, db, _, _, errs := endpoint.SetupEndpoint[CreateUserRequest](c)
 	if len(errs) > 0 {
 		c.JSON(http.StatusInternalServerError, errors.ApiError{
 			Code:    http.StatusInternalServerError,

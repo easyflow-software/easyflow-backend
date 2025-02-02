@@ -77,6 +77,7 @@ type ChatsUsers struct {
 	CreatedAt time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP"`
 	UpdatedAt time.Time `gorm:"type:datetime;default:CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"`
 	Key       string    `gorm:"type:text"`
+	Iv        string    `gorm:"type:varchar(25)"`
 	Chat      Chat      `gorm:"foreignKey:ChatID"`
 	User      User      `gorm:"foreignKey:UserID"`
 }

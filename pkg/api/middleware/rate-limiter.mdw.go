@@ -1,49 +1,38 @@
 package middleware
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"easyflow-backend/pkg/api/errors"
 	"easyflow-backend/pkg/config"
 	"easyflow-backend/pkg/enum"
+	"easyflow-backend/pkg/logger"
 	"encoding/hex"
+	"encoding/json"
+	e "errors"
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/time/rate"
+	"github.com/valkey-io/valkey-go"
 )
 
-// Stores rate limiting data for a single user
-type UserLimit struct {
-	Limiter     *rate.Limiter
-	LastRequest time.Time
+type rateLimiter struct {
+	FirstHit time.Time `json:"first_hit"`
+	Hits     int       `json:"hits"`
 }
 
-// Creates a rate limiting middleware that restricts requests per user.
-// Uses signed cookies to identify users and applies rate limiting based on the provided limit and burst parameters.
-func NewRateLimiter(limit float64, burst int) gin.HandlerFunc {
-	userLimitMap := make(map[string]UserLimit)
-	var userLimitMapMutex sync.RWMutex
-
-	// Start cleanup goroutine
-	go func() {
-		for {
-			time.Sleep(time.Minute)
-			cleanupOldEntries(userLimitMap, &userLimitMapMutex)
-		}
-	}()
-
+func RateLimiterMiddleware(requests int, timeframe time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rawCfg, ok := c.Get("config")
 		if !ok {
-			c.JSON(500, errors.ApiError{
+			c.JSON(http.StatusInternalServerError, errors.ApiError{
 				Code:    http.StatusInternalServerError,
-				Error:   enum.ApiError,
+				Error:   "ConfigError",
 				Details: "Config not found in context",
 			})
 			c.Abort()
@@ -52,108 +41,212 @@ func NewRateLimiter(limit float64, burst int) gin.HandlerFunc {
 
 		cfg, ok := rawCfg.(*config.Config)
 		if !ok {
-			c.JSON(500, errors.ApiError{
+			c.JSON(http.StatusInternalServerError, errors.ApiError{
 				Code:    http.StatusInternalServerError,
-				Error:   enum.ApiError,
-				Details: "Config could not be cast to *common.Config",
+				Error:   "ConfigError",
+				Details: "Config is not of type *common.Config",
 			})
 			c.Abort()
 			return
 		}
 
-		cookieName := "user_id"
-		userID, err := c.Cookie(cookieName)
-		if err != nil || userID == "" {
-			// Generate a new user ID and set the cookie with a signature
-			userID = generateUniqueID()
-			signedUserID := signCookie(userID, cfg)
-			c.SetCookie(cookieName, signedUserID, 3600, "/", "", false, true)
-			// sleep to keep the rate limiter from being bypassed
-			time.Sleep(time.Duration(1/limit) * time.Second)
-		} else {
-			// Verify the cookie signature
-			userID, err = verifyCookie(userID, cfg)
+		rawLogger, ok := c.Get("logger")
+		if !ok {
+			c.JSON(http.StatusInternalServerError, errors.ApiError{
+				Code:    http.StatusInternalServerError,
+				Error:   "LoggerError",
+				Details: "Logger not found in context",
+			})
+			c.Abort()
+			return
+		}
+
+		logger, ok := rawLogger.(*logger.Logger)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, errors.ApiError{
+				Code:    http.StatusInternalServerError,
+				Error:   "LoggerError",
+				Details: "Logger is not of type *logger.Logger",
+			})
+			c.Abort()
+			return
+		}
+
+		rawValkeyClient, ok := c.Get("valkey")
+		if !ok {
+			c.JSON(http.StatusInternalServerError, errors.ApiError{
+				Code:    http.StatusInternalServerError,
+				Error:   "ValkeyError",
+				Details: "Valkey not found in context",
+			})
+			c.Abort()
+			return
+		}
+
+		valkeyClient, ok := rawValkeyClient.(valkey.Client)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, errors.ApiError{
+				Code:    http.StatusInternalServerError,
+				Error:   "ValkeyError",
+				Details: "Valkey is not of type *valkey.Client",
+			})
+			c.Abort()
+			return
+		}
+
+		var userID string
+		var cacheKey string
+
+		userIDCookie, err := c.Request.Cookie("user_id")
+		if err != nil {
+			logger.PrintfDebug("Request has no user_id. Setting cookie in response and using alternate user_id instead")
+			signedCookie, err := signedUserID(cfg)
 			if err != nil {
-				// If verification fails, generate a new user ID
-				userID = generateUniqueID()
-				signedUserID := signCookie(userID, cfg)
-				c.SetCookie(cookieName, signedUserID, 3600, "/", "", false, true)
-				// sleep to keep the rate limiter from being bypassed
-				time.Sleep(time.Duration(1/limit) * time.Second)
+				c.JSON(http.StatusInternalServerError, errors.ApiError{
+					Code:    http.StatusInternalServerError,
+					Error:   enum.ApiError,
+					Details: err,
+				})
+				c.Abort()
+				return
+			}
+			c.SetCookie("user_id", signedCookie, 60*60*24*365, "/", cfg.Domain, cfg.Stage == "production", true)
+			userID = c.ClientIP()
+		} else {
+			userID, err = validateSignedUserID(userIDCookie.Value, cfg)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, errors.ApiError{
+					Code:    http.StatusBadRequest,
+					Error:   enum.InvalidCookie,
+					Details: err,
+				})
+				c.Abort()
+				return
 			}
 		}
 
-		userLimit := getUserLimiter(userID, limit, burst, userLimitMap, &userLimitMapMutex)
+		cacheKey = fmt.Sprintf("rate-limiter:%s:%s", c.FullPath(), userID)
 
-		if userLimit.Limiter.Allow() {
-			c.Next()
+		limit, err := valkeyClient.Do(context.Background(), valkeyClient.B().Get().Key(cacheKey).Build()).ToString()
+		if err != nil {
+			logger.PrintfDebug("No rate limiting found for %s. Creating new entry", cacheKey)
+			rateLimit := rateLimiter{
+				FirstHit: time.Now(),
+				Hits:     1,
+			}
+			rateLimitBytes, err := json.Marshal(rateLimit)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, errors.ApiError{
+					Code:    http.StatusInternalServerError,
+					Error:   enum.ApiError,
+					Details: err,
+				})
+				c.Abort()
+				return
+			}
+
+			rateLimitString := string(rateLimitBytes)
+
+			if err := valkeyClient.Do(context.Background(), valkeyClient.B().Set().Key(cacheKey).Value(rateLimitString).Ex(timeframe+1*time.Minute).Build()).Error(); err != nil {
+				c.JSON(http.StatusInternalServerError, errors.ApiError{
+					Code:    http.StatusInternalServerError,
+					Error:   enum.ApiError,
+					Details: err,
+				})
+				c.Abort()
+				return
+			}
 		} else {
-			time.Sleep(time.Duration(1/limit) * time.Second)
-			c.Next()
-		}
-	}
+			var rateLimiter rateLimiter
+			err := json.Unmarshal([]byte(limit), &rateLimiter)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, errors.ApiError{
+					Code:    http.StatusInternalServerError,
+					Error:   enum.ApiError,
+					Details: err,
+				})
+				c.Abort()
+				return
+			}
 
+			// Check if time window has expired
+			if time.Since(rateLimiter.FirstHit) > timeframe {
+				// Reset the counter if the time window has expired
+				rateLimiter.FirstHit = time.Now()
+				rateLimiter.Hits = 1
+			} else {
+				// Check if limit is exceeded within the current window
+				if rateLimiter.Hits >= requests {
+					c.JSON(http.StatusTooManyRequests, errors.ApiError{
+						Code:  http.StatusTooManyRequests,
+						Error: enum.TooManyRequests,
+					})
+					c.Abort()
+					return
+				}
+				// Increment hits if within limits
+				rateLimiter.Hits++
+			}
+
+			rateLimiterBytes, err := json.Marshal(rateLimiter)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, errors.ApiError{
+					Code:    http.StatusInternalServerError,
+					Error:   enum.ApiError,
+					Details: err,
+				})
+				c.Abort()
+				return
+			}
+
+			rateLimiterString := string(rateLimiterBytes)
+
+			if err := valkeyClient.Do(context.Background(), valkeyClient.B().Set().Key(cacheKey).Value(rateLimiterString).Ex(timeframe+1*time.Minute).Build()).Error(); err != nil {
+				c.JSON(http.StatusInternalServerError, errors.ApiError{
+					Code:    http.StatusInternalServerError,
+					Error:   enum.ApiError,
+					Details: err,
+				})
+				c.Abort()
+				return
+			}
+		}
+		c.Next()
+	}
 }
 
-// Retrieves or creates a rate limiter for the given user ID
-func getUserLimiter(userID string, limit float64, burst int, userLimitMap map[string]UserLimit, mutex *sync.RWMutex) UserLimit {
-	mutex.Lock()
-	defer mutex.Unlock()
-	limiter, exists := userLimitMap[userID]
-	if !exists {
-		limiter = UserLimit{
-			Limiter:     rate.NewLimiter(rate.Limit(limit), burst),
-			LastRequest: time.Now(),
-		}
-		userLimitMap[userID] = limiter
-	} else {
-		limiter.LastRequest = time.Now()
-		userLimitMap[userID] = limiter
-	}
-	return limiter
-}
-
-// Removes rate limiters that haven't been used in the last minute
-func cleanupOldEntries(userLimitMap map[string]UserLimit, mutex *sync.RWMutex) {
-	mutex.Lock()
-	defer mutex.Unlock()
-	cutoff := time.Now().Add(-time.Minute)
-	for userID, limiter := range userLimitMap {
-		if limiter.LastRequest.Before(cutoff) {
-			delete(userLimitMap, userID)
-		}
-	}
-}
-
-// Creates a random hex string to use as a user identifier
-func generateUniqueID() string {
-	bytes := make([]byte, 16)
-	_, err := rand.Read(bytes)
+func signedUserID(cfg *config.Config) (string, error) {
+	random := make([]byte, 32)
+	_, err := rand.Read(random)
 	if err != nil {
-		return "unknown"
+		return "", err
 	}
-	return hex.EncodeToString(bytes)
+
+	hash := hmac.New(sha256.New, []byte(cfg.CookieSecret))
+	if _, err := hash.Write(random); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(random) + "." + hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-// Creates an HMAC signature using the app's cookie secret
-func signCookie(data string, cfg *config.Config) string {
-	h := hmac.New(sha256.New, []byte(cfg.CookieSecret))
-	h.Write([]byte(data))
-	return data + "." + hex.EncodeToString(h.Sum(nil))
-}
+func validateSignedUserID(signedUserID string, cfg *config.Config) (string, error) {
+	signedPices := strings.Split(signedUserID, ".")
+	userIDString := signedPices[0]
+	signature := signedPices[1]
+	decoded, err := hex.DecodeString(userIDString)
+	if err != nil {
+		return "", err
+	}
 
-// Validates the HMAC signature and returns the original data
-func verifyCookie(signedData string, cfg *config.Config) (string, error) {
-	parts := strings.Split(signedData, ".")
-	if len(parts) != 2 {
-		return "", fmt.Errorf("invalid cookie format")
+	hash := hmac.New(sha256.New, []byte(cfg.CookieSecret))
+	if _, err := hash.Write(decoded); err != nil {
+		return "", err
 	}
-	data, signature := parts[0], parts[1]
-	h := hmac.New(sha256.New, []byte(cfg.CookieSecret))
-	h.Write([]byte(data))
-	expectedSignature := hex.EncodeToString(h.Sum(nil))
-	if !hmac.Equal([]byte(signature), []byte(expectedSignature)) {
-		return "", fmt.Errorf("invalid signature")
+
+	if hex.EncodeToString(hash.Sum(nil)) != signature {
+		return "", e.New("Invalid signed user ID")
 	}
-	return data, nil
+
+	return userIDString, nil
 }

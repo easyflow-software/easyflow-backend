@@ -17,7 +17,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func createUser(db *gorm.DB, payload *CreateUserRequest, cfg *config.Config, logger *logger.Logger, ip string) (*database.User, *errors.ApiError) {
+func createUser(db *gorm.DB, payload CreateUserRequest, cfg *config.Config, logger *logger.Logger, ip string) (*database.User, *errors.ApiError) {
 	ok, checkTurnstileErr := turnstile.CheckCloudflareTurnstile(logger, cfg, ip, payload.TurnstileToken)
 	if !ok {
 		return nil, checkTurnstileErr
@@ -139,7 +139,7 @@ func generateUploadProfilePictureURL(db *gorm.DB, jwtPayload *jwt.JWTTokenPayloa
 	return uploadURL, nil
 }
 
-func updateUser(db *gorm.DB, jwtPayload *jwt.JWTTokenPayload, payload *UpdateUserRequest, logger *logger.Logger) (*database.User, *errors.ApiError) {
+func updateUser(db *gorm.DB, jwtPayload *jwt.JWTTokenPayload, payload UpdateUserRequest, logger *logger.Logger) (*database.User, *errors.ApiError) {
 	var user database.User
 	if err := db.Where("id = ?", jwtPayload.UserID).First(&user).Error; err != nil {
 		logger.PrintfError("Error getting user: %s", err)
