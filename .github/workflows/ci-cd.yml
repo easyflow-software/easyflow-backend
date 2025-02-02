@@ -83,6 +83,7 @@ jobs:
             type=raw,value=dev,enable=${{ github.ref_name == 'main' }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' }}
             type=raw,value=${{ github.ref_name }},enable=${{ github.event_name == 'release' }}
+            type=raw,value=${{ github.sha }},enable=${{ github.event_name != 'release' && github.ref_name != 'main' }}
       - name: build and push docker image
         uses: docker/build-push-action@v6
         with:
@@ -126,6 +127,7 @@ jobs:
             type=raw,value=dev,enable=${{ github.ref_name == 'main' }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' }}
             type=raw,value=${{ github.ref_name }},enable=${{ github.event_name == 'release' }}
+            type=raw,value=${{ github.sha }},enable=${{ github.event_name != 'release' && github.ref_name != 'main' }}
       - name: build and push docker image
         uses: docker/build-push-action@v6
         with:
