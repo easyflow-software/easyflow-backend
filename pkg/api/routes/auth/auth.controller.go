@@ -15,11 +15,10 @@ import (
 
 func RegisterAuthEndpoints(r *gin.RouterGroup) {
 	r.Use(middleware.LoggerMiddleware("Auth"))
-	r.Use(middleware.RateLimiterMiddleware(100, 10*time.Minute))
-	r.POST("/login", loginController)
-	r.GET("/check", AuthGuard(), checkLoginController)
+	r.POST("/login", middleware.RateLimiterMiddleware(10, 10*time.Minute), loginController)
+	r.GET("/check", middleware.RateLimiterMiddleware(100, 10*time.Minute), AuthGuard(), checkLoginController)
 	r.GET("/refresh", middleware.RateLimiterMiddleware(25, 10*time.Minute), RefreshAuthGuard(), refreshController)
-	r.GET("/logout", AuthGuard(), logoutController)
+	r.GET("/logout", middleware.RateLimiterMiddleware(100, 10*time.Minute), AuthGuard(), logoutController)
 }
 
 func loginController(c *gin.Context) {

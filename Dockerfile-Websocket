@@ -9,10 +9,10 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 RUN apk --no-cache add ca-certificates tzdata
 
 # The binary will be copied here by the GitHub Action
-COPY ./bin/easyflow-websocket /app/easyflow-websocket
+COPY --chown=appuser:appgroup ./bin/easyflow-websocket /app/easyflow-websocket
 
-# Set ownership to non-root user
-RUN chown -R appuser:appgroup /app
+# Make the binary executable
+RUN chmod +x /app/easyflow-websocket
 
 USER appuser
 

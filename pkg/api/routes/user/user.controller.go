@@ -16,14 +16,13 @@ import (
 
 func RegisterUserEndpoints(r *gin.RouterGroup) {
 	r.Use(middleware.LoggerMiddleware("User"))
-	r.Use(middleware.RateLimiterMiddleware(100, 10*time.Minute))
-	r.POST("/signup", middleware.RateLimiterMiddleware(10, 10*time.Minute), createUserController)
-	r.GET("/", auth.AuthGuard(), getUserController)
-	r.GET("/exists/:email", userExists)
-	r.GET("/profile-picture", auth.AuthGuard(), getProfilePictureController)
-	r.GET("/upload-profile-picture", auth.AuthGuard(), uploadProfilePictureController)
-	r.PUT("/", auth.AuthGuard(), updateUserController)
-	r.DELETE("/", auth.AuthGuard(), deleteUserController)
+	r.POST("/signup", middleware.RateLimiterMiddleware(5, 10*time.Minute), createUserController)
+	r.GET("/", middleware.RateLimiterMiddleware(100, 10*time.Minute), auth.AuthGuard(), getUserController)
+	r.GET("/exists/:email", middleware.RateLimiterMiddleware(10, 10*time.Minute), userExists)
+	r.GET("/profile-picture", middleware.RateLimiterMiddleware(50, 10*time.Minute), auth.AuthGuard(), getProfilePictureController)
+	r.GET("/upload-profile-picture", middleware.RateLimiterMiddleware(5, 10*time.Minute), auth.AuthGuard(), uploadProfilePictureController)
+	r.PUT("/", middleware.RateLimiterMiddleware(50, 10*time.Minute), auth.AuthGuard(), updateUserController)
+	r.DELETE("/", middleware.RateLimiterMiddleware(5, 10*time.Minute), auth.AuthGuard(), deleteUserController)
 }
 
 func createUserController(c *gin.Context) {

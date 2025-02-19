@@ -1,16 +1,16 @@
 package middleware
 
 import (
-	"context"
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
 	"easyflow-backend/pkg/api/errors"
 	"easyflow-backend/pkg/config"
 	"easyflow-backend/pkg/enum"
 	"easyflow-backend/pkg/logger"
+
+	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	e "errors"
 	"fmt"
 	"net/http"
@@ -20,11 +20,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/valkey-io/valkey-go"
 )
-
-type rateLimiter struct {
-	FirstHit time.Time `json:"first_hit"`
-	Hits     int       `json:"hits"`
-}
 
 func RateLimiterMiddleware(requests int, timeframe time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -88,15 +83,13 @@ func RateLimiterMiddleware(requests int, timeframe time.Duration) gin.HandlerFun
 			c.JSON(http.StatusInternalServerError, errors.ApiError{
 				Code:    http.StatusInternalServerError,
 				Error:   "ValkeyError",
-				Details: "Valkey is not of type *valkey.Client",
+				Details: "Valkey is not of type valkey.Client",
 			})
 			c.Abort()
 			return
 		}
 
 		var userID string
-		var cacheKey string
-
 		userIDCookie, err := c.Request.Cookie("user_id")
 		if err != nil {
 			logger.PrintfDebug("Request has no user_id. Setting cookie in response and using alternate user_id instead")
@@ -125,83 +118,51 @@ func RateLimiterMiddleware(requests int, timeframe time.Duration) gin.HandlerFun
 			}
 		}
 
-		cacheKey = fmt.Sprintf("rate-limiter:%s:%s", c.FullPath(), userID)
+		ctx := context.Background()
+		cacheKey := fmt.Sprintf("rate-limiter:%s:%s", c.FullPath(), userID)
 
-		limit, err := valkeyClient.Do(context.Background(), valkeyClient.B().Get().Key(cacheKey).Build()).ToString()
-		if err != nil {
-			logger.PrintfDebug("No rate limiting found for %s. Creating new entry", cacheKey)
-			rateLimit := rateLimiter{
-				FirstHit: time.Now(),
-				Hits:     1,
-			}
-			rateLimitBytes, err := json.Marshal(rateLimit)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, errors.ApiError{
-					Code:    http.StatusInternalServerError,
-					Error:   enum.ApiError,
-					Details: err,
-				})
-				c.Abort()
-				return
-			}
+		// Get current state
+		cmds := make(valkey.Commands, 2)
+		cmds[0] = valkeyClient.B().Hget().Key(cacheKey).Field("hits").Build()
+		cmds[1] = valkeyClient.B().Hget().Key(cacheKey).Field("first_hit").Build()
 
-			rateLimitString := string(rateLimitBytes)
+		results := valkeyClient.DoMulti(ctx, cmds...)
+		hits, hitsErr := results[0].AsInt64()
+		firstHit, firstHitErr := results[1].AsInt64()
 
-			if err := valkeyClient.Do(context.Background(), valkeyClient.B().Set().Key(cacheKey).Value(rateLimitString).Ex(timeframe+1*time.Minute).Build()).Error(); err != nil {
-				c.JSON(http.StatusInternalServerError, errors.ApiError{
-					Code:    http.StatusInternalServerError,
-					Error:   enum.ApiError,
-					Details: err,
-				})
-				c.Abort()
-				return
-			}
-		} else {
-			var rateLimiter rateLimiter
-			err := json.Unmarshal([]byte(limit), &rateLimiter)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, errors.ApiError{
-					Code:    http.StatusInternalServerError,
-					Error:   enum.ApiError,
-					Details: err,
-				})
-				c.Abort()
-				return
-			}
+		// Check if entry exists and is still valid
+		if hitsErr != nil || firstHitErr != nil || time.Since(time.Unix(firstHit, 0)) > timeframe {
+			// Entry doesn't exist, create new
+			logger.PrintfDebug("Creating new rate limit entry for %s", cacheKey)
 
-			// Check if time window has expired
-			if time.Since(rateLimiter.FirstHit) > timeframe {
-				// Reset the counter if the time window has expired
-				rateLimiter.FirstHit = time.Now()
-				rateLimiter.Hits = 1
-			} else {
-				// Check if limit is exceeded within the current window
-				if rateLimiter.Hits >= requests {
-					c.JSON(http.StatusTooManyRequests, errors.ApiError{
-						Code:  http.StatusTooManyRequests,
-						Error: enum.TooManyRequests,
+			cmds = make(valkey.Commands, 3)
+			cmds[0] = valkeyClient.B().Hset().Key(cacheKey).FieldValue().FieldValue("hits", "1").Build()
+			cmds[1] = valkeyClient.B().Hset().Key(cacheKey).FieldValue().FieldValue("first_hit", fmt.Sprintf("%d", time.Now().Unix())).Build()
+			cmds[2] = valkeyClient.B().Expire().Key(cacheKey).Seconds(int64(timeframe.Seconds())).Build()
+
+			results = valkeyClient.DoMulti(ctx, cmds...)
+			for _, result := range results {
+				if err := result.Error(); err != nil {
+					c.JSON(http.StatusInternalServerError, errors.ApiError{
+						Code:    http.StatusInternalServerError,
+						Error:   enum.ApiError,
+						Details: err,
 					})
 					c.Abort()
 					return
 				}
-				// Increment hits if within limits
-				rateLimiter.Hits++
 			}
-
-			rateLimiterBytes, err := json.Marshal(rateLimiter)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, errors.ApiError{
-					Code:    http.StatusInternalServerError,
-					Error:   enum.ApiError,
-					Details: err,
+		} else {
+			if hits >= int64(requests) {
+				c.JSON(http.StatusTooManyRequests, errors.ApiError{
+					Code:  http.StatusTooManyRequests,
+					Error: enum.TooManyRequests,
 				})
 				c.Abort()
 				return
 			}
 
-			rateLimiterString := string(rateLimiterBytes)
-
-			if err := valkeyClient.Do(context.Background(), valkeyClient.B().Set().Key(cacheKey).Value(rateLimiterString).Ex(timeframe+1*time.Minute).Build()).Error(); err != nil {
+			if err := valkeyClient.Do(ctx, valkeyClient.B().Hincrby().Key(cacheKey).Field("hits").Increment(1).Build()).Error(); err != nil {
 				c.JSON(http.StatusInternalServerError, errors.ApiError{
 					Code:    http.StatusInternalServerError,
 					Error:   enum.ApiError,
@@ -217,8 +178,7 @@ func RateLimiterMiddleware(requests int, timeframe time.Duration) gin.HandlerFun
 
 func signedUserID(cfg *config.Config) (string, error) {
 	random := make([]byte, 32)
-	_, err := rand.Read(random)
-	if err != nil {
+	if _, err := rand.Read(random); err != nil {
 		return "", err
 	}
 
@@ -234,6 +194,7 @@ func validateSignedUserID(signedUserID string, cfg *config.Config) (string, erro
 	signedPices := strings.Split(signedUserID, ".")
 	userIDString := signedPices[0]
 	signature := signedPices[1]
+
 	decoded, err := hex.DecodeString(userIDString)
 	if err != nil {
 		return "", err

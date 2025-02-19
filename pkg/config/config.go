@@ -12,13 +12,14 @@ import (
 
 type Config struct {
 	// Application
-	Stage        string
-	LogLevel     logger.LogLevel
-	Port         string
-	DebugMode    bool
-	FrontendURL  string
-	Domain       string
-	CookieSecret string
+	Stage         string
+	LogLevel      logger.LogLevel
+	BackendPort   string
+	WebsocketPort string
+	DebugMode     bool
+	FrontendURL   string
+	Domain        string
+	CookieSecret  string
 	// Database
 	DatabaseURL string
 	// Valkey
@@ -69,13 +70,14 @@ func LoadDefaultConfig() *Config {
 
 	return &Config{
 		// Application
-		Stage:        getEnv("STAGE", "development"),
-		LogLevel:     logger.LogLevel(getEnv("LOG_LEVEL", "DEBUG")),
-		Port:         getEnv("PORT", "4000"),
-		DebugMode:    getEnv("DEBUG_MODE", "false") == "true",
-		FrontendURL:  getEnv("FRONTEND_URL", ""),
-		Domain:       getEnv("DOMAIN", ""),
-		CookieSecret: getEnv("COOKIE_SECRET", "cookie_secret"),
+		Stage:         getEnv("STAGE", "development"),
+		LogLevel:      logger.LogLevel(getEnv("LOG_LEVEL", "DEBUG")),
+		BackendPort:   getEnv("BACKEND_PORT", "4000"),
+		WebsocketPort: getEnv("WEBSOCKET_PORT", "8080"),
+		DebugMode:     getEnv("DEBUG_MODE", "false") == "true",
+		FrontendURL:   getEnv("FRONTEND_URL", ""),
+		Domain:        getEnv("DOMAIN", ""),
+		CookieSecret:  getEnv("COOKIE_SECRET", "cookie_secret"),
 		//Database
 		DatabaseURL: getEnv("DATABASE_URL", ""),
 		// Valkey

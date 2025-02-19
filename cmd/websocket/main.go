@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -9,8 +10,10 @@ import (
 	"easyflow-backend/pkg/database"
 	"easyflow-backend/pkg/jwt"
 	"easyflow-backend/pkg/logger"
-	"easyflow-backend/pkg/socket"
+	"easyflow-backend/pkg/retry"
+	socket "easyflow-backend/pkg/websockets"
 
+	"github.com/valkey-io/valkey-go"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
 )
@@ -60,10 +63,32 @@ func main() {
 		panic(err)
 	}
 
+	log.PrintfInfo("Connected to database")
+
+	// Adding retry wrapper for valkey client connection
+	connectValkeyClient := retry.WithRetry(func() (valkey.Client, error) {
+		return valkey.NewClient(valkey.ClientOption{
+			Username:    cfg.ValkeyUsername,
+			Password:    cfg.ValkeyPassword,
+			ClientName:  cfg.ValkeyClientName,
+			InitAddress: []string{cfg.ValkeyURL},
+		})
+	}, log, nil)
+
+	// Initialize valkey client with retry wrapper
+	valkeyClient, err := connectValkeyClient()
+	if err != nil {
+		log.PrintfError("Failed to connect to valkey")
+		panic(err)
+	}
+	log.PrintfInfo("Connected to valkey")
+
 	// Initialize WebSocket hub for managing connections
-	var hub = socket.NewHub(dbInst.GetClient(), log)
+	var hub = socket.NewHub(cfg, log, valkeyClient, dbInst.GetClient())
 	// Start the hub in a separate goroutine
 	go hub.Run()
+
+	log.PrintfInfo("Initialized WebSocket hub")
 
 	// Register the WebSocket handler for the root path
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -98,8 +123,9 @@ func main() {
 	})
 
 	// Start the WebSocket server
-	log.PrintfInfo("WebSocket server starting on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	port := fmt.Sprintf(":%s", cfg.WebsocketPort)
+	log.PrintfInfo("WebSocket server starting on %s", port)
+	if err := http.ListenAndServe(port, nil); err != nil {
 		log.PrintfError("ListenAndServe: %s", err)
 	}
 }

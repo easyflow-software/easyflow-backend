@@ -127,8 +127,8 @@ func main() {
 	}
 
 	// Start the HTTP server
-	log.PrintfInfo("Starting server on port %s", cfg.Port)
-	if err := router.Run(":" + cfg.Port); err != nil {
+	log.PrintfInfo("Starting server on port %s", cfg.BackendPort)
+	if err := router.Run(":" + cfg.BackendPort); err != nil {
 		log.PrintfError("Failed to start server: %s", err)
 		return
 	}
