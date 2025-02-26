@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"easyflow-backend/pkg/config"
@@ -19,13 +21,15 @@ import (
 )
 
 func main() {
-	// Initialize logger specifically for WebSocket operations
-	var log = logger.NewLogger(os.Stdout, "WebSocket", "DEBUG", "System")
-
 	// Load application configuration
 	var cfg = config.LoadDefaultConfig()
 
+	// Initialize logger specifically for WebSocket operations
+	var log = logger.NewLogger(os.Stdout, "WebSocket", cfg.LogLevel, "System")
+
 	var logLevel gormLogger.LogLevel
+
+	log.PrintfInfo("PID: %d", os.Getpid())
 	// Configure application mode and database logging based on debug setting
 	if !cfg.DebugMode {
 		log.PrintfInfo("Starting in release mode")
@@ -34,6 +38,7 @@ func main() {
 		log.PrintfInfo("Starting in debug mode")
 		logLevel = gormLogger.Info
 	}
+
 	// Database connection retry logic
 	var isConnected = false
 	var dbInst *database.DatabaseInst
@@ -83,6 +88,10 @@ func main() {
 	}
 	log.PrintfInfo("Connected to valkey")
 
+	// Create a channel to listen for termination signals
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+
 	// Initialize WebSocket hub for managing connections
 	var hub = socket.NewHub(cfg, log, valkeyClient, dbInst.GetClient())
 	// Start the hub in a separate goroutine
@@ -123,9 +132,25 @@ func main() {
 	})
 
 	// Start the WebSocket server
-	port := fmt.Sprintf(":%s", cfg.WebsocketPort)
-	log.PrintfInfo("WebSocket server starting on %s", port)
-	if err := http.ListenAndServe(port, nil); err != nil {
-		log.PrintfError("ListenAndServe: %s", err)
+	go func() {
+		port := fmt.Sprintf(":%s", cfg.WebsocketPort)
+		log.PrintfInfo("WebSocket server starting on %s", port)
+		if err := http.ListenAndServe(port, nil); err != nil {
+			log.PrintfError("ListenAndServe: %s", err)
+		}
+	}()
+
+	// Wait for termination signal
+	<-stop
+
+	log.PrintfInfo("Received shutdown signal, initiating graceful shutdown")
+
+	// First shutdown WebSockets
+	if err := hub.GracefulShutdown(20 * time.Second); err != nil {
+		log.PrintfError("WebSocket hub shutdown error: %v", err)
 	}
+
+	log.PrintfInfo("Server gracefully stopped")
+
+	os.Exit(0)
 }
