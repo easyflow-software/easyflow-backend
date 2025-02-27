@@ -3,21 +3,18 @@ repos:
     hooks:
     - id: gofmt
       name: gofmt
-      entry: gofmt -w .
+      entry: sh -c 'gofmt -w .'
       language: system
-      pass_filenames: false
+      require_serial: true
 
     - id: go-mod-tidy
-      name: go-mod-tidy
-      entry: go mod tidy
+      name: go mod tidy
+      entry: sh -c 'go mod tidy'
       language: system
-      pass_filenames: false
-      require_serial: true
     
     - id: golangci-lint
-      name: golangci-lint
-      entry: golangci-lint run
+      name: golangci lint
+      entry: sh -c 'golangci-lint run'
       language: system
-      pass_filenames: false
       require_serial: true
       

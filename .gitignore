@@ -3,6 +3,8 @@ bin
 
 # IDEs
 .vscode
+.idea
+.zed
 
 # env
 .env
