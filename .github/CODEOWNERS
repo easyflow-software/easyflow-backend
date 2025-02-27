@@ -1,0 +1,6 @@
+# This is a CODEOWNERS file for GitHub
+# It defines who is required to review and approve changes to the repository
+# Format: file_pattern github_username
+
+# This line makes you the owner of all files in the entire repository
+* @OnlyNico43
